@@ -1,0 +1,163 @@
+import sounddevice as sd
+import soundfile as sf
+import glob
+import os
+import pyttsx3
+import undetected_chromedriver as uc
+import time
+import whisper
+
+from pydub import AudioSegment
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+URL = 'https://lexii.ai/'
+driver = uc.Chrome()
+driver.get(URL)
+wait = WebDriverWait(driver, 60)
+engine = pyttsx3.init()
+
+fs = 44100  # Sample rate
+seconds = 20  # Duration of recording
+
+print('Recording Audio...')
+myrecording = sd.rec(int(seconds * fs), samplerate=fs, channels=1)
+sd.wait()  # Wait until recording is finished
+
+# Save the recording as a WAV file
+wav_file = "recording.wav"
+sf.write(wav_file, myrecording, fs)
+
+# Convert WAV to MP3
+mp3_file = "recording.mp3"
+sound = AudioSegment.from_wav(wav_file)
+sound.export(mp3_file, format="mp3")
+
+# Essentially, this is recording the output from the speakers hence the noise and not working with headphones
+# Need to find a way to record the output from a video not the speakers
+# Use Threading to run recordings at the same time. 
+
+filename = "recording.mp3"
+def createSegments():
+    # Create the folder if it doesn't already exist
+    if not os.path.exists("audioSegments"):
+        os.makedirs("audioSegments")
+
+
+    # Open the mp3 file
+    mp3_file = AudioSegment.from_mp3(filename+".mp3")
+
+    # Calculate the number of segments needed
+    segment_length = 30  # seconds
+    num_segments = mp3_file.duration_seconds // segment_length
+
+    # If the file is not evenly divisible into 30-second segments,
+    # we'll need one additional segment
+    if mp3_file.duration_seconds % segment_length != 0:
+        num_segments += 1
+
+    # Split the file into segments
+    print('Creating Audio Segments... Please Wait')
+    for i in range(int(num_segments)):
+        start_time = i * segment_length * 1000  # pydub works with milliseconds
+        end_time = (i + 1) * segment_length * 1000
+        segment = mp3_file[start_time:end_time]
+        # segment.export(f"segment{i+1}.mp3", format="mp3")
+        segment.export(f"audioSegments/segment{i+1}.mp3", format="mp3")
+
+def createSegments():
+    # Create the folder if it doesn't already exist
+    if not os.path.exists("audioSegments"):
+        os.makedirs("audioSegments")
+
+    print('Creating Audio Segments... Please Wait')
+
+    # Open the mp3 file
+    mp3_file = AudioSegment.from_mp3(filename)
+
+    # Calculate the number of segments needed
+    segment_length = 30  # seconds
+    num_segments = mp3_file.duration_seconds // segment_length
+
+    # If the file is not evenly divisible into 30-second segments,
+    # we'll need one additional segment
+    if mp3_file.duration_seconds % segment_length != 0:
+        num_segments += 1
+
+    # Split the file into segments
+    for i in range(int(num_segments)):
+        start_time = i * segment_length * 1000  # pydub works with milliseconds
+        end_time = (i + 1) * segment_length * 1000
+        segment = mp3_file[start_time:end_time]
+        # segment.export(f"segment{i+1}.mp3", format="mp3")
+        segment.export(f"audioSegments/segment{i+1}.mp3", format="mp3")
+
+def createTranscription():
+    model = whisper.load_model("base")
+
+    # Get a list of all the mp3 files in the audioSegments folder
+    mp3_files = glob.glob("audioSegments/*.mp3")
+
+    # Sort the list of files by their names
+    mp3_files = sorted(mp3_files)
+
+    # Open a new file for writing
+    with open("Transcription.txt", "w") as f:
+        # Loop through the files and transcribe them
+        for mp3_file in mp3_files:
+            # Load the audio and pad/trim it to fit 30 seconds
+            audio = whisper.load_audio(mp3_file)
+            audio = whisper.pad_or_trim(audio)
+
+            # Make log-Mel spectrogram and move to the same device as the model
+            mel = whisper.log_mel_spectrogram(audio).to(model.device)
+
+            # Decode the audio
+            options = whisper.DecodingOptions(fp16 = False)
+            result = whisper.decode(model, mel, options)
+
+            # Print the recognized text
+            print(result.text)
+            print('Transcribing Text... Please Wait')
+
+            # Write the recognized text to the file
+            f.write(result.text + "\n")
+
+createSegments()
+createTranscription()
+print('Transcription Complete...')
+
+# Open the file in read mode
+with open("Transcription.txt", "r") as file:
+    # Read the contents of the file
+    contents = file.read()
+
+# prompt = 'Summarise this for me \n'
+
+# Send Prompt
+search_box = driver.find_element(By.XPATH, "//*[@id='root']/div/div[2]/div/div/div[2]/input")
+search_box.send_keys(contents)
+time.sleep(0.1)
+button_element = driver.find_element(By.XPATH, "//*[@id='root']/div/div[2]/div/div/div[2]/button")
+button_element.click()
+
+# Wait for Prompt
+print('Generating Response... Please Wait!')
+sendPrompt = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='root']/div/div[2]/div/div/div[2]/button")))
+time.sleep(1)
+response = driver.find_element(By.XPATH, f"//*[@id='root']/div/div[2]/div/div/div[1]/div[{3}]/div/div")
+text = response.text
+time.sleep(0.5)
+sources = driver.find_element(By.XPATH, f"//*[@id='root']/div/div[2]/div/div/div[1]/div[{3}]/div/div/div/div")
+source = sources.text
+print('Response:', text)
+
+def speak_text(text):
+    engine.say(text)
+    engine.runAndWait()
+
+speak_text(text)
+
+driver.quit()
+
