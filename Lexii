@@ -1,0 +1,53 @@
+
+import undetected_chromedriver as uc
+import time
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+URL = 'https://lexii.ai/'
+
+# initialize webdriver
+driver = uc.Chrome()
+# navigate to website
+driver.get(URL)
+# set the timeout limit to 30 seconds
+wait = WebDriverWait(driver, 30)
+
+def askPrompt():
+    # create or open a text file with write mode
+    with open("prompt_response.txt", "a") as file:
+            prompt = input('Enter your prompt -->  ')
+            wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='root']/div/div[2]/div/div/div[2]/input"))).send_keys(prompt)
+            wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='root']/div/div[2]/div/div/div[2]/button"))).click()
+
+            try:
+                print('Generating Response... Please Wait!')
+                time.sleep(7.5)
+                response = driver.find_element(By.XPATH, f"//*[@id='root']/div/div[2]/div/div/div[1]/div[{3 + (i * 2)}]/div/div")
+                text = response.text
+            except:
+                time.sleep(10)
+                try:
+                    print('Generating Response... Please Wait!')
+                    time.sleep(7.5)
+                    response = driver.find_element(By.XPATH, f"//*[@id='root']/div/div[2]/div/div/div[1]/div[{3 + (i * 2)}]/div/div")
+                    text = response.text
+                except:
+                    print("Error: Could not retrieve response.")
+
+            # Write the prompt and response to the file
+            file.write(prompt + '\n')
+            file.write(text + '\n\n')
+            print('Response:', text)
+
+# loop for 10 iterations
+for i in range(10):
+    askPrompt()
+
+time.sleep(5)
+print('You have reached the Prompt Limit! Please Restart Script to continue!')
+time.sleep(5)
+driver.quit()
+
